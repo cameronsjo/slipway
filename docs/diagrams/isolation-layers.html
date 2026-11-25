@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Isolation layers — shared runner pool</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #f5f5f5;
+      --color-ink:     #2d3142;
+      --color-muted:   #4f5d75;
+      --color-accent:  #eb6c36;
+      --font-sans:     'Geist', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace;
+    }
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+    .frame { max-width: 1200px; width: 100%; }
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-ink);
+      margin-bottom: 1.5rem;
+    }
+    svg { width: 100%; min-width: 900px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Nested containment · Diagram Design</p>
+    <h1>Isolation layers, outside in</h1>
+
+    <svg viewBox="0 0 1000 800" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="isolation-layers-title isolation-layers-desc">
+      <title id="isolation-layers-title">Isolation layers of the shared runner pool worker</title>
+      <desc id="isolation-layers-desc">Five nested boundaries a CI job crosses on MS-A2: the bare-metal host, a k3s pod, a Kata VM, the runner container running as an unprivileged user, and a root-only Docker daemon inside the VM.</desc>
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker>
+        <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#eb6c36"/></marker>
+      </defs>
+
+      <rect width="100%" height="100%" fill="#f5f5f5"/>
+
+      <!-- Ring 1 — MS-A2 bare-metal host -->
+      <rect x="40" y="88" width="920" height="624" rx="8" fill="rgba(45,49,66,0.015)" stroke="rgba(45,49,66,0.35)" stroke-width="1"/>
+      <rect x="52" y="82" width="292" height="14" fill="#f5f5f5"/>
+      <text x="60" y="93" fill="rgba(45,49,66,0.55)" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">MS-A2 · BARE-METAL HOST</text>
+      <text x="60" y="118" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace">Ubuntu · host kernel · nftables · Flux</text>
+      <text x="60" y="132" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace">64GiB LVM thin pool · k3s</text>
+
+      <!-- Ring 2 — k3s pod "runner worker" -->
+      <rect x="68" y="136" width="864" height="548" rx="8" fill="rgba(45,49,66,0.022)" stroke="rgba(79,93,117,0.55)" stroke-width="1"/>
+      <rect x="80" y="130" width="308" height="14" fill="#f5f5f5"/>
+      <text x="88" y="141" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">K3S POD · RUNNER WORKER</text>
+      <text x="88" y="166" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace">namespace · NetworkPolicy · ValidatingAdmissionPolicy</text>
+      <text x="88" y="180" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace">limits: 2 CPU / 8GiB</text>
+
+      <!-- Ring 3 — Kata VM via QEMU -->
+      <rect x="96" y="184" width="808" height="472" rx="8" fill="rgba(45,49,66,0.03)" stroke="rgba(45,49,66,0.70)" stroke-width="1"/>
+      <rect x="108" y="178" width="252" height="14" fill="#f5f5f5"/>
+      <text x="116" y="189" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">KATA VM · QEMU</text>
+      <text x="116" y="214" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace">own kernel · 2 vCPU / 8GiB · read-only guest OS image</text>
+      <text x="116" y="228" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace">two 10GiB disks, thin-sliced from the host pool</text>
+
+      <!-- Ring 4 — runner container, UID 1001 -->
+      <rect x="124" y="232" width="752" height="396" rx="8" fill="rgba(45,49,66,0.04)" stroke="#2d3142" stroke-width="1"/>
+      <rect x="136" y="226" width="320" height="14" fill="#f5f5f5"/>
+      <text x="144" y="237" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">RUNNER CONTAINER · UID 1001</text>
+      <text x="144" y="262" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace">GitHub Actions runner · one job, then discarded</text>
+
+      <!-- Ring 5 (focal, innermost) — Docker daemon as root, inside the VM only -->
+      <rect x="148" y="272" width="704" height="336" rx="8" fill="rgba(235,108,54,0.08)" stroke="#eb6c36" stroke-width="1.2"/>
+      <rect x="160" y="266" width="284" height="14" fill="#f5f5f5"/>
+      <text x="168" y="277" fill="#eb6c36" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">DOCKER DAEMON (ROOT)</text>
+      <text x="168" y="302" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">the job's containers and builds</text>
+      <text x="168" y="316" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace">root only inside this VM — never on the host</text>
+
+      <!-- Editorial callout, top-right margin -->
+      <text x="960" y="32" fill="#2d3142" font-size="14" font-style="italic" font-family="'Instrument Serif', serif" text-anchor="end">each shell is a boundary a job must cross,</text>
+      <text x="960" y="50" fill="#2d3142" font-size="14" font-style="italic" font-family="'Instrument Serif', serif" text-anchor="end">in order — today's plain runner pods have</text>
+      <text x="960" y="68" fill="#2d3142" font-size="14" font-style="italic" font-family="'Instrument Serif', serif" text-anchor="end">only the first two.</text>
+      <path d="M 900 72 Q 860 84 800 100" fill="none" stroke="rgba(45,49,66,0.40)" stroke-width="1" stroke-dasharray="4,3"/>
+      <circle cx="800" cy="100" r="2" fill="#2d3142"/>
+
+      <!-- Footnote strip -->
+      <line x1="40" y1="736" x2="960" y2="736" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+      <text x="40" y="756" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" letter-spacing="0.02em">Up to two worker pods run at once. Each VM is destroyed after its job.</text>
+    </svg>
+  </div>
+</body>
+</html>

@@ -1,0 +1,8 @@
+{
+  // The field guide keeps one paragraph or bullet per line and lets the editor wrap,
+  // so a grep for a phrase never misses text split across a hard wrap. MD013 is off
+  // here only; every other rule inherits from the repository config.
+  "config": {
+    "MD013": false
+  }
+}

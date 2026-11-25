@@ -1,0 +1,11 @@
+# Private operator bootstrap CA (never commit)
+image/linux/bootstrap-ca.pem
+
+# Local build outputs
+/bin/
+*.oci
+*.tar
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+.DS_Store

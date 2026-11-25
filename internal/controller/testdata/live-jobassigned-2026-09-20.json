@@ -1,0 +1,14 @@
+{
+  "messageId": 1,
+  "messageType": "RunnerScaleSetJobMessages",
+  "statistics": {
+    "totalAvailableJobs": 0,
+    "totalAcquiredJobs": 0,
+    "totalAssignedJobs": 1,
+    "totalRunningJobs": 0,
+    "totalRegisteredRunners": 0,
+    "totalBusyRunners": 0,
+    "totalIdleRunners": 0
+  },
+  "body": "[{\"eventName\":\"push\",\"finishTime\":\"0001-01-01T00:00:00Z\",\"jobDisplayName\":\"build\",\"jobId\":\"00000000-0000-4000-8000-000000000001\",\"jobWorkflowRef\":\"example-owner/example-repo/.github/workflows/ci.yml@refs/heads/main\",\"messageType\":\"JobAssigned\",\"ownerName\":\"example-owner\",\"queueTime\":\"2026-09-20T02:00:00.0000000Z\",\"repositoryName\":\"example-repo\",\"requestLabels\":[\"slipway-macos\"],\"runnerAssignTime\":\"2026-09-20T02:00:02.0000000Z\",\"runnerRequestId\":0,\"scaleSetAssignTime\":\"2026-09-20T02:00:01.0000000Z\",\"workflowRunId\":1234567890}]"
+}

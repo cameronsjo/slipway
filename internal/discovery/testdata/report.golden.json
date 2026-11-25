@@ -1,0 +1,132 @@
+{
+  "status": "degraded",
+  "reasons": [
+    "cycle",
+    "demand"
+  ],
+  "platform": "linux",
+  "generated": "2026-09-13T12:00:00.000000001Z",
+  "uptime_seconds": 3601,
+  "cycle": {
+    "status": "degraded",
+    "last_completed": "2026-09-13T11:50:00Z",
+    "age_seconds": 600,
+    "interval_seconds": 60,
+    "stale": true,
+    "consecutive_failures": 4,
+    "diagnostic": "unavailable"
+  },
+  "discovery": {
+    "status": "degraded",
+    "last_success": "2026-09-13T11:55:00Z",
+    "last_attempt": "2026-09-13T11:59:00Z",
+    "age_seconds": 300,
+    "freshness_seconds": 180,
+    "stale": true,
+    "diagnostic": "unavailable"
+  },
+  "demand": {
+    "status": "degraded",
+    "queued_offers": 5,
+    "oldest_offer_seconds": 900,
+    "stall_threshold_seconds": 300,
+    "stalled": true,
+    "stalled_blocked_by": "no-headroom",
+    "stalled_seconds": 600
+  },
+  "capacity": {
+    "status": "degraded",
+    "capacity": 2,
+    "legacy_slots": 1,
+    "pool_slots": 1,
+    "charged": 1,
+    "free": 1,
+    "stuck_charged": 1,
+    "trusted_headroom": 1,
+    "admission": "fenced",
+    "admission_reason": "inventory-unknown",
+    "provisioning_suppressed": true,
+    "suppressed_until": "2026-09-13T12:15:00Z"
+  },
+  "leases": {
+    "reserved": 1,
+    "acquire-intent": 2,
+    "acquire-unknown": 3,
+    "acquired": 4,
+    "provisioning": 5,
+    "running": 6,
+    "cleanup-pending": 7,
+    "quarantined": 8
+  },
+  "workers": {
+    "status": "degraded",
+    "tracked": 9,
+    "booting": 1,
+    "running": 2,
+    "destroying": 3,
+    "overdue_startup": 4,
+    "overdue_cleanup": 5,
+    "untracked_seen": true,
+    "retired_unused": 6
+  },
+  "backend": {
+    "status": "degraded",
+    "complete": true,
+    "observed_at": "2026-09-13T11:58:00Z",
+    "age_seconds": 120,
+    "freshness_seconds": 180,
+    "stale": true,
+    "free_slots": 2,
+    "diagnostic": "unavailable"
+  },
+  "bootstrap": {
+    "status": "degraded",
+    "listener_ready": true,
+    "outstanding": 1,
+    "delivered": 2,
+    "expired": 3,
+    "failed": 4
+  },
+  "policy": {
+    "status": "degraded",
+    "digest": "3b1f0c2d",
+    "loaded_at": "2026-09-13T11:00:00Z",
+    "degraded": true,
+    "default_enabled": true,
+    "entries": 12,
+    "unknown_entries": 1,
+    "diagnostic": "unavailable"
+  },
+  "repositories_total": 3,
+  "repositories_eligible": 2,
+  "repositories_degraded": 1,
+  "repositories": [
+    {
+      "status": "degraded",
+      "full_name": "cameronsjo/homelab",
+      "eligible": true,
+      "discovered": "2026-09-13T10:00:00Z",
+      "scale_set": {
+        "phase": "unverified",
+        "label": "slipway-linux",
+        "observed": "2026-09-13T11:59:00Z",
+        "diagnostic": "unavailable"
+      },
+      "policy": {
+        "enabled": true,
+        "max_concurrent": 2,
+        "platforms": [
+          "linux"
+        ],
+        "enabled_source": "repository",
+        "max_concurrent_source": "repository",
+        "platforms_source": "default"
+      },
+      "charged_slots": 1,
+      "assigned_jobs": 2,
+      "queued_offers": 3,
+      "session_open": true,
+      "diagnostic": "unavailable"
+    }
+  ]
+}

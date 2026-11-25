@@ -1,0 +1,42 @@
+{
+  "tart_binary": "/opt/homebrew/bin/tart",
+  "sudo_binary": "/usr/bin/sudo",
+  "pfctl_binary": "/sbin/pfctl",
+  "vm_stat_binary": "/usr/bin/vm_stat",
+
+  "pf_anchor": "tart-ci",
+  "pf_conflicting_anchor": "com.apple.internet-sharing",
+  "pf_min_block_rules": 8,
+  "pf_anchor_file": "/etc/pf.anchors/tart-ci",
+  "pf_anchor_sha256": "a029bf64786c92c52b938ac33551c42a8904984fa5281db12f7b0916e86c31ae",
+
+  "base_image_ref": "example.invalid/macos-base@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "tart_home": "/Users/example/.tart",
+  "ledger_dir": "/Users/example/Library/Application Support/sjo-runner-pool/tart-ledger",
+
+  "guest_subnet": "192.168.2.0/24",
+  "guest_gateway": "192.168.2.1",
+
+  "vm_cpu_count": 4,
+  "vm_memory_mib": 8192,
+
+  "physical_vm_capacity": 2,
+  "memory_floor_bytes": 12884901888,
+
+  "runner_tarball_path": "/Users/example/Library/Application Support/sjo-runner-pool/actions-runner.tar.gz",
+  "runner_tarball_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "guest_runner_root": "/Users/admin/sjo-actions-runner",
+
+  "launcher_path": "/Users/example/Library/Application Support/sjo-runner-pool/runner-pool-guest-launch",
+  "launcher_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "guest_launcher_path": "/Users/admin/sjo-runner-pool-guest-launch",
+  "guest_user": "admin",
+
+  "bootstrap_ca_file": "/Users/example/Library/Application Support/sjo-runner-pool/bootstrap-ca.pem",
+
+  "startup_poll_interval": "2s",
+  "reassert_interval": "60s",
+  "stop_timeout": "60s",
+  "gate_read_timeout": "10s",
+  "launch_handshake_timeout": "60s"
+}

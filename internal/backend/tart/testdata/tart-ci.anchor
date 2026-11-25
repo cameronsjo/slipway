@@ -1,0 +1,56 @@
+# tart-ci — guest -> host boundary. Regenerated 20260804-080517;
+# antispoof block + DHCP bootstrap pass added by hand 2026-09-04 (homelab#417).
+#
+# THIS FILE IS HASH-PINNED. tart-pf-assert.sh refuses to bring the boundary up
+# unless its SHA-256 matches EXPECT_HASH, so any edit here is a two-file change:
+# recompute `shasum -a 256`, update EXPECT_HASH, and update README.md § Anchor
+# hash. Deploy both together — the assert stops a running guest on mismatch.
+#
+# pf's (self) does NOT include the vmnet bridge address, so 'to (self)' fails
+# open on exactly this path. Explicit tables instead.
+table <hostaddrs>  persist { 100.121.177.121,192.168.1.15,192.168.2.1 }
+table <hostaddrs6> persist
+
+# What the guest legitimately needs from us: DHCP and DNS. Narrow, first.
+#
+# The 0.0.0.0 pass is NOT redundant with the one below it. A guest with no lease
+# yet sources DHCP DISCOVER from 0.0.0.0, which is not in 192.168.2.0/24 — so it
+# matches neither the subnet pass nor anything else, and the antispoof block
+# added below would drop it and leave the guest unable to get an address at all.
+pass in quick on bridge100 proto udp from 0.0.0.0 to 255.255.255.255 port { 67, 68 }
+pass in quick on bridge100 proto udp from 192.168.2.0/24 to any port { 67, 68 }
+pass in quick on bridge100 proto { tcp, udp } from 192.168.2.0/24 to 192.168.2.1 port 53
+
+# --- IPv4 antispoof (homelab#417) ---
+# Every IPv4 block below is SOURCE-scoped (`from 192.168.2.0/24`), while the IPv6
+# half correctly keys on the interface. A job with root in the guest can
+# `ip addr add 10.9.9.9/24` and emit packets that match none of them, falling
+# through to com.apple/*. The return path does not come back, so this bought
+# blind one-way reach to host UDP services rather than a full compromise — but
+# the premise of this anchor is default-deny on bridge100, and a source-scoped
+# rule cannot express that. Interface-scoped, so the host's own interfaces are
+# untouched, exactly as the v6 rules are.
+block drop in quick on bridge100 inet from ! 192.168.2.0/24 to any
+
+# --- IPv4 ---
+block drop in quick inet from 192.168.2.0/24 to <hostaddrs>
+block drop in quick inet from 192.168.2.0/24 to 192.168.1.0/24
+block drop in quick inet from 192.168.2.0/24 to 100.64.0.0/10
+# Static gateway block, independent of <hostaddrs>: that table is re-derived from
+# live interfaces and drops 192.168.2.1 whenever no VM is up.
+block drop in quick inet from 192.168.2.0/24 to 192.168.2.1
+
+# --- IPv6 (B1) ---
+# Previously a single unscoped 'to fe80::/10', which matched none of the host's
+# three ULAs (incl. the Tailscale range fd7a:115c:a1e0::/48) despite live tcp6
+# listeners on 22/5900/88. Containment on that path came from softnet or routing
+# — the dependency this boundary exists to not have.
+#
+# Scoped 'on bridge100' so the host's own interfaces are untouched (an unscoped
+# inbound block to fe80::/10 hits en0/awdl0 too — neighbour discovery, AirDrop).
+# fc00::/7 covers every ULA including Tailscale's. GLOBAL v6 (2xxx::) is
+# deliberately NOT blocked: guest v6 egress uses it and killing CI is not an
+# option. <hostaddrs6> catches a global address if the host ever gets one.
+block drop in quick on bridge100 inet6 from any to <hostaddrs6>
+block drop in quick on bridge100 inet6 from any to fe80::/10
+block drop in quick on bridge100 inet6 from any to fc00::/7

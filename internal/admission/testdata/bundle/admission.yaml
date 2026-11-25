@@ -1,0 +1,172 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: slipway
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods, pods/ephemeralcontainers]
+  matchConditions:
+    - name: pool-namespace
+      expression: object.metadata.namespace == 'github-runner-pool'
+  variables:
+    - name: labels
+      expression: >-
+        has(object.metadata.labels) ? object.metadata.labels : {}
+    - name: isController
+      expression: variables.labels.exists(k, k == 'app.kubernetes.io/name' && variables.labels[k] == 'runner-pool-controller')
+    - name: isWorker
+      expression: variables.labels.exists(k, k == 'slipway/managed-by' && variables.labels[k] == 'slipway') && variables.labels.exists(k, k == 'slipway/platform' && variables.labels[k] == 'linux')
+    - name: containers
+      expression: >-
+        object.spec.containers + (has(object.spec.initContainers) ? object.spec.initContainers : [])
+  validations:
+    - expression: variables.isController != variables.isWorker
+      message: sjo-runner-pool-known-pod-shape-required
+    - expression: >-
+        (!has(object.spec.hostNetwork) || !object.spec.hostNetwork) &&
+        (!has(object.spec.hostPID) || !object.spec.hostPID) &&
+        (!has(object.spec.hostIPC) || !object.spec.hostIPC)
+      message: sjo-runner-pool-no-host-namespaces
+    - expression: >-
+        !has(object.metadata.annotations) ||
+        object.metadata.annotations.all(k,
+          !k.startsWith('io.katacontainers.') &&
+          !k.startsWith('container.apparmor.security.beta.kubernetes.io/') &&
+          !k.startsWith('k8s.v1.cni.cncf.io/'))
+      message: sjo-runner-pool-no-runtime-network-or-profile-overrides
+    - expression: >-
+        (!has(object.spec.ephemeralContainers) || size(object.spec.ephemeralContainers) == 0) &&
+        (!has(object.spec.shareProcessNamespace) || !object.spec.shareProcessNamespace)
+      message: sjo-runner-pool-no-debug-or-shared-process-namespace
+    # The policy pins the image, command, args and static env, but permitted
+    # envFrom and env[].valueFrom. Either reaches the github-runner-app Secret
+    # in this same namespace, which would put the App private key inside a job
+    # VM -- the one credential the whole bootstrap design exists to keep out of
+    # it. Denied on every container and init container of a worker Pod, by
+    # shape rather than by naming the Secret, because the next Secret added to
+    # this namespace would otherwise need the rule edited again.
+    #
+    # fieldRef is the one valueFrom permitted, and it is not an exception being
+    # tolerated -- it is REQUIRED. The runner container carries
+    # SLIPWAY_BOOTSTRAP_EXPECTED_NAME and SLIPWAY_BOOTSTRAP_EXPECTED_UID from the
+    # downward API, and the controller refuses to attach the capability to a Pod
+    # that lacks them (internal/backend/kubernetes/transport.go,
+    # validateObservedRunner). A blanket valueFrom deny would refuse the only
+    # worker shape the pool can create, and it would present as every worker
+    # being denied by admission rather than as a policy bug.
+    #
+    # resourceFieldRef is denied with the other two. It reaches no Secret, but
+    # the worker shape has no use for it, and the narrower rule is the one whose
+    # allowed set can be read off the transport's own validator.
+    - expression: >-
+        !variables.isWorker || variables.containers.all(c,
+          (!has(c.envFrom) || size(c.envFrom) == 0) &&
+          (!has(c.env) || c.env.all(e,
+            !has(e.valueFrom) ||
+            (!has(e.valueFrom.secretKeyRef) && !has(e.valueFrom.configMapKeyRef) &&
+             !has(e.valueFrom.resourceFieldRef) && has(e.valueFrom.fieldRef)))))
+      message: sjo-runner-pool-no-indirect-worker-environment
+    # The exact worker. Three Memory emptyDirs (work, socket, tmp) and the
+    # exact dockerd argv, whose data root is /var/lib/sjo-docker on dockerd's
+    # own devmapper disk (homelab#983). The retired fourth `docker` volume is
+    # denied, not tolerated: this is an exact allowlist, never a union of an
+    # old and a new shape. The controller's Go code builds the same argv and
+    # volume set, and services/runner-pool/internal/backend/kubernetes
+    # admission_agreement_test.go fails when the two disagree.
+    - expression: >-
+        !variables.isWorker || (
+          has(object.spec.runtimeClassName) &&
+          object.spec.runtimeClassName == 'sjo-kata-qemu-runner' &&
+          has(object.spec.automountServiceAccountToken) &&
+          !object.spec.automountServiceAccountToken &&
+          (!has(object.spec.serviceAccountName) || object.spec.serviceAccountName == 'default') &&
+          has(object.spec.volumes) &&
+          size(object.spec.volumes) == 3 &&
+          object.spec.volumes.all(v,
+            v.name in ['work', 'socket', 'tmp'] &&
+            has(v.emptyDir) && has(v.emptyDir.medium) && v.emptyDir.medium == 'Memory' &&
+            has(v.emptyDir.sizeLimit)) &&
+          object.spec.volumes.exists(v, v.name == 'work') &&
+          object.spec.volumes.exists(v, v.name == 'socket') &&
+          object.spec.volumes.exists(v, v.name == 'tmp') &&
+          size(object.spec.containers) == 2 &&
+          (!has(object.spec.initContainers) || size(object.spec.initContainers) == 0) &&
+          object.spec.containers.filter(c, c.name == 'runner').size() == 1 &&
+          object.spec.containers.filter(c, c.name == 'dockerd').size() == 1 &&
+          object.spec.containers.filter(c, c.name == 'runner').all(c,
+            c.image == 'registry.example.invalid/slipway/linux-worker@sha256:1f884e0fd4b629b6c5760391b1c40e886469b51fd4c12b1bcf4a45f589eac371' &&
+            c.command == ['/usr/local/bin/slipway-bootstrap'] &&
+            c.args.size() == 9 &&
+            c.args[0] == '/usr/local/bin/runner-pool-worker' &&
+            c.args[1] == '-controller' &&
+            c.args[2] == 'https://runner-pool-bootstrap.github-runner-pool.svc.cluster.local:8443' &&
+            c.args[3] == '-lease' &&
+            c.args[5] == '-runner-root' && c.args[6] == '/actions-runner' &&
+            c.args[7] == '-ca-file' && c.args[8] == '/etc/runner-pool/bootstrap/ca.pem' &&
+            has(c.securityContext) && has(c.securityContext.privileged) && !c.securityContext.privileged &&
+            has(c.securityContext.runAsNonRoot) && c.securityContext.runAsNonRoot) &&
+          object.spec.containers.filter(c, c.name == 'dockerd').all(c,
+            c.image == 'docker.io/library/docker@sha256:7bf70dcb85c822e3fa6f2d332143e474b99147b9d7b39102b0cfe8b04a7dd61b' &&
+            c.command == ['dockerd-entrypoint.sh'] &&
+            c.args == ['dockerd', '--host=unix:///var/run/docker.sock', '--data-root=/var/lib/sjo-docker', '--exec-root=/var/run/docker', '--storage-driver=overlay2', '--ip6tables=false', '--group=121'] &&
+            has(c.securityContext) && has(c.securityContext.privileged) && c.securityContext.privileged) &&
+          variables.containers.all(c,
+            (!has(c.volumeDevices) || size(c.volumeDevices) == 0) &&
+            (!has(c.volumeMounts) || c.volumeMounts.all(m, !has(m.mountPropagation) || m.mountPropagation == 'None')) &&
+            (!has(c.ports) || c.ports.all(p, !has(p.hostPort) || p.hostPort == 0))))
+      message: sjo-runner-pool-exact-kata-worker-required
+    - expression: >-
+        !variables.isController || (
+          !has(object.spec.runtimeClassName) &&
+          has(object.spec.serviceAccountName) &&
+          object.spec.serviceAccountName == 'runner-pool-controller' &&
+          has(object.spec.automountServiceAccountToken) &&
+          !object.spec.automountServiceAccountToken &&
+          size(object.spec.containers) == 2 &&
+          (!has(object.spec.initContainers) || size(object.spec.initContainers) == 0) &&
+          object.spec.containers.all(c,
+            (c.name == 'controller' && c.image == 'registry.example.invalid/slipway/controller@sha256:5e19a914c60c82c304517aa17822b2f22e1c14eb3da7af1bf89ea5757a9bab02' &&
+             has(c.command) && c.command == ['/usr/local/bin/runner-pool']) ||
+            (c.name == 'host-witness' && c.image == 'registry.example.invalid/slipway/host-witness@sha256:dce3af6efe8d24cf117e00c2753d8de058deeea064937af716f9aba3048a7e7e' &&
+             has(c.command) && c.command == ['/usr/local/bin/runner-pool-host-witness'])) &&
+          object.spec.containers.all(c,
+            (!has(c.stdin) || !c.stdin) && (!has(c.stdinOnce) || !c.stdinOnce) && (!has(c.tty) || !c.tty)) &&
+          object.spec.volumes.filter(v, has(v.hostPath)).size() == 2 &&
+          object.spec.volumes.filter(v, has(v.hostPath)).all(v,
+            (v.name == 'host-root' && v.hostPath.path == '/' && v.hostPath.type == 'Directory') ||
+            (v.name == 'witness-ledger' && v.hostPath.path == '/var/lib/sjo-runner-pool' && v.hostPath.type == 'DirectoryOrCreate')) &&
+          object.spec.containers.all(c,
+            !has(c.securityContext) || !has(c.securityContext.privileged) || !c.securityContext.privileged) &&
+          object.spec.containers.filter(c, c.name == 'host-witness').all(c,
+            has(c.securityContext) &&
+            c.securityContext.runAsUser == 0 &&
+            has(c.securityContext.capabilities) &&
+            c.securityContext.capabilities.drop == ['ALL'] &&
+            c.securityContext.capabilities.add.size() == 3 &&
+            c.securityContext.capabilities.add.all(x, x in ['DAC_READ_SEARCH', 'SYS_ADMIN', 'SYS_CHROOT']) &&
+            has(c.volumeMounts) &&
+            c.volumeMounts.filter(m, m.name == 'host-root').all(m, has(m.readOnly) && m.readOnly)))
+      message: sjo-runner-pool-exact-controller-witness-required
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: slipway
+spec:
+  policyName: slipway
+  validationActions: [Deny]
+  # The policy is cluster-scoped and its namespace filter used to be carried
+  # only by the pool-namespace CEL matchCondition, so the API server evaluated
+  # this policy for every Pod in the cluster and a CEL fault would have been a
+  # cluster-wide fail-closed (failurePolicy: Fail). The selector excludes other
+  # namespaces before CEL runs. The matchCondition stays as the second layer;
+  # a selector and a condition fail in different ways.
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: github-runner-pool

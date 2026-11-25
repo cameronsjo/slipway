@@ -1,0 +1,12 @@
+{
+  "sessionId": "00000000-0000-4000-8000-0000000000aa",
+  "ownerName": "example-owner/example-repo",
+  "runnerScaleSet": {
+    "id": 1,
+    "name": "slipway-macos",
+    "RunnerSetting": {},
+    "createdOn": "2026-09-20T01:00:00Z"
+  },
+  "messageQueueUrl": "https://broker.actions.githubusercontent.com/message/00000000-0000-4000-8000-0000000000aa",
+  "messageQueueAccessToken": "synthetic-not-a-token"
+}

@@ -1,0 +1,27 @@
+{
+  "namespace": "github-runner-pool",
+  "owner_uid": "linux-ms-a2-v1",
+  "node_name": "homelab-ms-a2",
+  "runtime_class_name": "sjo-kata-qemu-runner",
+  "runner_image": "registry.example.invalid/slipway/linux-worker@sha256:1f884e0fd4b629b6c5760391b1c40e886469b51fd4c12b1bcf4a45f589eac371",
+  "docker_image": "docker.io/library/docker@sha256:7bf70dcb85c822e3fa6f2d332143e474b99147b9d7b39102b0cfe8b04a7dd61b",
+  "worker_command": "/usr/local/bin/runner-pool-worker",
+  "runner_root": "/actions-runner",
+  "ca_file": "/etc/runner-pool/bootstrap/ca.pem",
+  "witness_socket": "/run/sjo-runner-pool/witness.sock",
+  "witness_server_uid": 0,
+  "witness_timeout": "30s",
+  "runner_resources": {
+    "requests": {"cpu_milli": 750, "memory_bytes": 2147483648, "storage_bytes": 3221225472},
+    "limits": {"cpu_milli": 1500, "memory_bytes": 4294967296, "storage_bytes": 10737418240}
+  },
+  "docker_resources": {
+    "requests": {"cpu_milli": 250, "memory_bytes": 1610612736, "storage_bytes": 4294967296},
+    "limits": {"cpu_milli": 500, "memory_bytes": 4294967296, "storage_bytes": 10737418240}
+  },
+  "runtime_overhead": {"cpu_milli": 250, "memory_bytes": 536870912, "storage_bytes": 536870912},
+  "volumes": {"work_bytes": 2147483648, "socket_bytes": 16777216, "tmp_bytes": 268435456},
+  "per_worker_image_cache_bytes": 2147483648,
+  "per_worker_log_bytes": 268435456,
+  "container_rootfs_bytes": 10737418240
+}

@@ -1,0 +1,278 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runner-pool-controller
+  namespace: github-runner-pool
+  labels:
+    app.kubernetes.io/name: runner-pool-controller
+    app.kubernetes.io/part-of: github-runner-pool
+spec:
+  # Activated. One controller, alongside the parent kustomization entry that
+  # makes Flux render this bundle. Rollback sets this to 0 and waits for the
+  # drain before the kustomization entry is removed.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: runner-pool-controller
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: runner-pool-controller
+        app.kubernetes.io/part-of: github-runner-pool
+    spec:
+      serviceAccountName: runner-pool-controller
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 120
+      nodeSelector:
+        kubernetes.io/hostname: homelab-ms-a2
+        kubernetes.io/arch: amd64
+      imagePullSecrets:
+        - name: gitea-registry
+      securityContext:
+        fsGroup: 121
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: controller
+          image: registry.example.invalid/slipway/controller@sha256:5e19a914c60c82c304517aa17822b2f22e1c14eb3da7af1bf89ea5757a9bab02
+          imagePullPolicy: IfNotPresent
+          # DECLARED, not inherited from the image ENTRYPOINT. The admission
+          # policy pins the worker's command and left the controller arm's
+          # unpinned, so a Pod wearing the controller's labels and its pinned
+          # digest could have been given any command -- with the witness's
+          # host-root mount and the controller's ServiceAccount beside it.
+          # An image ENTRYPOINT is not a pin: `command` overrides it, and a
+          # policy that never mentions `command` cannot see that happen.
+          command: [/usr/local/bin/runner-pool]
+          args:
+            - -mode=daemon
+            - -platform=linux
+            - -installation-repo=cameronsjo/homelab
+            # EMPTY ON PURPOSE, and the empty value is kept rather than the
+            # flag dropped so the line stays greppable. Empty means every
+            # PRIVATE, ACTIVE repository in the App installation may receive an
+            # slipway-linux scale set, so onboarding a repo is an edit to its own
+            # `runs-on` and needs no PR here. It is not "no filter": public,
+            # archived and disabled repositories are refused unconditionally --
+            # ADR-0003 forbids a self-hosted runner where a fork PR is
+            # attacker-authored -- as is any repository outside the
+            # installation account. See internal/controller/discovery.go
+            # eligibleForPool. Naming repositories here restores the old pin
+            # semantics for a smaller pool.
+            - -repository-allowlist=
+            # The bound that used to come from the allowlist. The controller
+            # opens one queue session per served repository and polls all of
+            # them each cycle, so this caps the sweep; a value above 100 is
+            # refused at startup rather than silently clamped. Onboarding is
+            # also rate limited to five scale-set creations per cycle, so the
+            # first sweep over ~70 private repositories spreads over ~14
+            # minutes and reports `creating=`/`create_deferred=` while it does.
+            - -max-repositories=80
+            - -app-id-file=/run/app/APP_ID
+            - -app-key-file=/run/app/APP_PRIVATE_KEY
+            # A SUBDIRECTORY of the journal volume, never its root. The controller
+            # requires a private 0700 state directory and creates one itself when
+            # it is absent; a local-path volume root arrives root-owned and
+            # world-accessible (measured 2777 on the first rollout), and fsGroup
+            # only adds group access, so pointing at the root crash-looped it.
+            - -state-dir=/var/lib/runner-pool/state
+            # Four workers, the Linux ceiling (#926): the worker /28 has four slot
+            # addresses (.2-.5) and the grown thin pool fits four 30.5GiB workers (three writable devices each, #983).
+            # Anything above the ceiling is refused at startup rather than
+            # clamped, so this is a startup gate and not a tuning knob. Two from
+            # 2026-09-21 until #926's window. Safe at any headroom: when another
+            # worker does not fit the controller logs free=... reason=memory and waits. The controller
+            # adopts this change on the journal's next idle point (or its own
+            # restart once the pool drains) -- it never truncates a held slot;
+            # see internal/controller/README.md "Changing capacity or legacy
+            # slots".
+            - -capacity=12
+            # The 13 legacy cronjob runners are minute-scheduled and ephemeral,
+            # so they occupy no pool slot. The controller's headroom accounting
+            # observes their live occupancy instead of reserving for it.
+            - -legacy-slots=0
+            - -bootstrap-url=https://runner-pool-bootstrap.github-runner-pool.svc.cluster.local:8443
+            - -bootstrap-address=0.0.0.0:8443
+            - -bootstrap-certificate-file=/run/bootstrap-tls/tls.crt
+            - -bootstrap-key-file=/run/bootstrap-tls/tls.key
+            - -platform-config-file=/etc/runner-pool/controller.json
+            - -daemon-interval=1m
+            # The reaper tears down finished workers and refills their slots
+            # every 10 s while the cycle waits in the broker long-poll
+            # (homelab#1190). verify-manifests.py pins one value, 2s to 5m,
+            # or negative. Rollback: -reap-interval=-1s turns it off, and the
+            # cycle reaps once per pass as before.
+            # docs/plans/2026-09-29-runner-pool-reap-on-exit.md
+            - -reap-interval=10s
+            # Worker creations per provisioning pass, run at once. Each create
+            # spends ~4 s on GitHub and a Kata boot, and one at a time made the
+            # last worker of a nine-job burst wait 53 s (homelab#1190 item 2).
+            # The first create of each pass still runs alone, and after it the
+            # controller runs at most 2 at once (one under the failure
+            # breaker's threshold of 3) whatever this says. verify-manifests.py
+            # pins one integer, 1..8. Rollback: -create-concurrency=1 is the
+            # serial loop. docs/plans/2026-09-29-runner-pool-concurrent-create.md
+            - -create-concurrency=2
+            # The queue janitor, ENFORCING. It cancels queued runs superseded by a
+            # newer commit or belonging to a PR that closed after the run was
+            # created, and only ever under its OWN GitHub App: the three file
+            # flags point at that App's Secret, never at github-runner-app.
+            # The Secret is optional, so with it absent the controller starts
+            # and logs one "Queue janitor off" line. verify-manifests.py pins
+            # the mode to off, dry-run or enforce; any other value fails closed
+            # to off in the controller. Rollback: set this back to dry-run
+            # (logs, cancels nothing) or off.
+            # docs/plans/2026-09-24-runner-pool-queue-janitor.md
+            - -queue-janitor=enforce
+            - -janitor-app-id-file=/run/janitor-app/APP_ID
+            - -janitor-app-key-file=/run/janitor-app/APP_PRIVATE_KEY
+            - -janitor-installation-id-file=/run/janitor-app/INSTALLATION_ID
+          ports:
+            - name: bootstrap
+              containerPort: 8443
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 200m
+              memory: 384Mi
+            limits:
+              cpu: 200m
+              memory: 384Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 121
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: app
+              mountPath: /run/app
+              readOnly: true
+            - name: janitor-app
+              mountPath: /run/janitor-app
+              readOnly: true
+            - name: bootstrap-tls
+              mountPath: /run/bootstrap-tls
+              readOnly: true
+            - name: controller-config
+              mountPath: /etc/runner-pool
+              readOnly: true
+            - name: journal
+              mountPath: /var/lib/runner-pool
+            # SQLite needs a writable temp dir for some statements, and the
+            # root filesystem is read-only. Without it the deaf-exit session
+            # close failed with "disk I/O error (6410)" (homelab#1206).
+            - name: tmp
+              mountPath: /tmp
+            - name: witness-socket
+              mountPath: /run/sjo-runner-pool
+            - name: kube-api-access
+              mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+              readOnly: true
+        - name: host-witness
+          image: registry.example.invalid/slipway/host-witness@sha256:dce3af6efe8d24cf117e00c2753d8de058deeea064937af716f9aba3048a7e7e
+          imagePullPolicy: IfNotPresent
+          command: [/usr/local/bin/runner-pool-host-witness]
+          args: [-config=/etc/runner-pool-witness/host-witness.json]
+          # The CPU LIMIT is 1, the request stays 100m, and the gap is the
+          # point. The limit arrived because an inventory pass execed
+          # `ctr containers info` once per container over 114 of them: 5.1s
+          # unthrottled, over 30s pinned at 100m, so the witness answered
+          # nothing and the controller timed out reading the socket.
+          #
+          # THAT LOOP IS GONE (#845): a pass now lists the dedicated
+          # snapshotter once and execs only for a snapshot the ledger does not
+          # already attribute, which in steady state is zero. The limit stays
+          # as headroom for the first pass after a restart, when nothing is
+          # attributed yet. Lowering it is a separate measurement, not a
+          # tidy-up: the request is what keeps the scheduling footprint honest
+          # for a process that is idle between passes.
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 128Mi
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+            runAsGroup: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+              add: [DAC_READ_SEARCH, SYS_ADMIN, SYS_CHROOT]
+          volumeMounts:
+            - name: witness-config
+              mountPath: /etc/runner-pool-witness
+              readOnly: true
+            - name: witness-socket
+              mountPath: /run/sjo-runner-pool
+            - name: host-root
+              mountPath: /host
+              readOnly: true
+              mountPropagation: HostToContainer
+            - name: witness-ledger
+              mountPath: /var/lib/sjo-runner-pool
+      volumes:
+        - name: app
+          secret:
+            secretName: github-runner-app
+            defaultMode: 0440
+        # The queue janitor's own App. OPTIONAL, and it must stay so: a
+        # required Secret that does not exist holds the whole Pod in
+        # ContainerCreating, which is a pool outage for a feature that is off.
+        - name: janitor-app
+          secret:
+            secretName: runner-pool-janitor-app
+            defaultMode: 0440
+            optional: true
+        - name: bootstrap-tls
+          secret:
+            secretName: runner-pool-bootstrap-tls
+            defaultMode: 0440
+        - name: controller-config
+          configMap:
+            name: runner-pool-controller-config
+        - name: witness-config
+          configMap:
+            name: runner-pool-host-witness-config
+        - name: journal
+          persistentVolumeClaim:
+            claimName: runner-pool-journal
+        - name: witness-socket
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 64Mi
+        - name: kube-api-access
+          projected:
+            defaultMode: 0440
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 3600
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - key: ca.crt
+                      path: ca.crt
+        - name: host-root
+          hostPath:
+            path: /
+            type: Directory
+        - name: witness-ledger
+          hostPath:
+            path: /var/lib/sjo-runner-pool
+            type: DirectoryOrCreate

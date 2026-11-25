@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 900 820" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="network-boundary-title network-boundary-desc">
+      <title id="network-boundary-title">Network boundary around a shared runner pool worker VM</title>
+      <desc id="network-boundary-desc">Diagram of allowed and denied network destinations for a Kata worker VM on MS-A2, per homelab#722's draft plan, with the enforcing layer named for each control and every control marked unproven pending a live run.</desc>
+      <defs><style>@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap');</style>
+        <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker>
+        <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#eb6c36"/></marker>
+      </defs>
+
+      <rect width="100%" height="100%" fill="#f5f5f5"/>
+
+      <!-- Arrows first (behind boxes) -->
+
+      <!-- ALLOW: Public HTTPS :443 -->
+      <path d="M 220,355 H 314 Q 322,355 322,347 V 90 Q 322,82 330,82 H 520"
+            fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+      <!-- ALLOW: Cluster DNS -->
+      <path d="M 220,370 H 330 Q 338,370 338,362 V 186 Q 338,178 346,178 H 520"
+            fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+      <!-- ALLOW (focal): Bootstrap JIT endpoint -->
+      <path d="M 220,385 H 346 Q 354,385 354,377 V 282 Q 354,274 362,274 H 520"
+            fill="none" stroke="#eb6c36" stroke-width="1.4" marker-end="url(#arrow-accent)"/>
+
+      <!-- DENY: Host & LAN (stops short of the node, no marker) -->
+      <path d="M 220,400 H 362 Q 370,400 370,392 V 378 Q 370,370 378,370 H 508"
+            fill="none" stroke="#4f5d75" stroke-width="1" stroke-dasharray="5,4"/>
+      <line x1="508" y1="364" x2="508" y2="376" stroke="#4f5d75" stroke-width="2"/>
+
+      <!-- DENY: Tailnet & link-local/metadata -->
+      <path d="M 220,415 H 378 Q 386,415 386,423 V 458 Q 386,466 394,466 H 508"
+            fill="none" stroke="#4f5d75" stroke-width="1" stroke-dasharray="5,4"/>
+      <line x1="508" y1="460" x2="508" y2="472" stroke="#4f5d75" stroke-width="2"/>
+
+      <!-- DENY: Siblings & other pods -->
+      <path d="M 220,430 H 394 Q 402,430 402,438 V 554 Q 402,562 410,562 H 508"
+            fill="none" stroke="#4f5d75" stroke-width="1" stroke-dasharray="5,4"/>
+      <line x1="508" y1="556" x2="508" y2="568" stroke="#4f5d75" stroke-width="2"/>
+
+      <!-- DENY: other ports, IPv6, spoofing -->
+      <path d="M 220,445 H 410 Q 418,445 418,453 V 650 Q 418,658 426,658 H 508"
+            fill="none" stroke="#4f5d75" stroke-width="1" stroke-dasharray="5,4"/>
+      <line x1="508" y1="652" x2="508" y2="664" stroke="#4f5d75" stroke-width="2"/>
+
+      <!-- Node: Worker VM (source of every attempt) -->
+      <rect x="40" y="340" width="180" height="120" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <rect x="48" y="348" width="24" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+      <text x="60" y="357" fill="#2d3142" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">VM</text>
+      <text x="130" y="394" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Worker VM</text>
+      <text x="130" y="410" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">(Kata guest)</text>
+      <text x="130" y="428" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">sjo-canary0 bridge · /27</text>
+      <text x="130" y="442" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">source of every attempt</text>
+
+      <!-- Node: A1 Public HTTPS :443 -->
+      <rect x="520" y="40" width="300" height="84" rx="6" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.30)" stroke-width="1" stroke-dasharray="4,3"/>
+      <rect x="528" y="48" width="40" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+      <text x="548" y="57" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">ALLOW</text>
+      <text x="670" y="72" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Public HTTPS</text>
+      <text x="670" y="88" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">TCP 443 · real TLS · buildx pull</text>
+      <text x="670" y="102" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">layer: nft accept, PREROUTING</text>
+      <text x="670" y="116" fill="#7a8399" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">#722 — UNPROVEN</text>
+
+      <!-- Node: A2 Cluster DNS -->
+      <rect x="520" y="136" width="300" height="84" rx="6" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.30)" stroke-width="1" stroke-dasharray="4,3"/>
+      <rect x="528" y="144" width="40" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+      <text x="548" y="153" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">ALLOW</text>
+      <text x="670" y="168" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Cluster DNS</text>
+      <text x="670" y="184" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">kube-dns · UDP/TCP 53</text>
+      <text x="670" y="198" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">layer: nft accept, PREROUTING</text>
+      <text x="670" y="212" fill="#7a8399" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">#722 — UNPROVEN</text>
+
+      <!-- Node: A3 Bootstrap JIT endpoint (focal) -->
+      <rect x="520" y="232" width="300" height="84" rx="6" fill="rgba(235,108,54,0.08)" stroke="#eb6c36" stroke-width="1.2" stroke-dasharray="4,4"/>
+      <rect x="528" y="240" width="40" height="12" rx="2" fill="transparent" stroke="rgba(235,108,54,0.50)" stroke-width="0.8"/>
+      <text x="548" y="249" fill="#eb6c36" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">ALLOW</text>
+      <text x="670" y="264" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Bootstrap JIT endpoint</text>
+      <text x="670" y="280" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">one exact tuple · controller-side</text>
+      <text x="670" y="294" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">layer: nft accept + 1-port NetworkPolicy</text>
+      <text x="670" y="308" fill="#7a8399" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">#722 — UNPROVEN</text>
+
+      <!-- Node: D1 Host & LAN -->
+      <rect x="520" y="328" width="300" height="84" rx="6" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.30)" stroke-width="1" stroke-dasharray="4,3"/>
+      <rect x="528" y="336" width="32" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+      <text x="544" y="345" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">DENY</text>
+      <text x="670" y="360" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Host &amp; LAN</text>
+      <text x="670" y="376" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">MS-A2 host · 192.168/16 · 10/8 · 172.16/12</text>
+      <text x="670" y="390" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">layer: nft PREROUTING, pre-DNAT</text>
+      <text x="670" y="404" fill="#7a8399" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">#722 — UNPROVEN</text>
+
+      <!-- Node: D2 Tailnet & link-local/metadata -->
+      <rect x="520" y="424" width="300" height="84" rx="6" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.30)" stroke-width="1" stroke-dasharray="4,3"/>
+      <rect x="528" y="432" width="32" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+      <text x="544" y="441" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">DENY</text>
+      <text x="670" y="456" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Tailnet &amp; link-local</text>
+      <text x="670" y="472" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">100.64/10 · 169.254/16 metadata</text>
+      <text x="670" y="486" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">layer: nft PREROUTING, pre-DNAT</text>
+      <text x="670" y="500" fill="#7a8399" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">#722 — UNPROVEN</text>
+
+      <!-- Node: D3 Siblings & other pods -->
+      <rect x="520" y="520" width="300" height="84" rx="6" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.30)" stroke-width="1" stroke-dasharray="4,3"/>
+      <rect x="528" y="528" width="32" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+      <text x="544" y="537" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">DENY</text>
+      <text x="670" y="552" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Siblings &amp; other pods</text>
+      <text x="670" y="568" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">sibling worker · Services/NodePorts · other ctrl ports</text>
+      <text x="670" y="582" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">layer: CNI portIsolation + NetPol (weaker) + FORWARD</text>
+      <text x="670" y="596" fill="#7a8399" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">#722 — UNPROVEN</text>
+
+      <!-- Node: D4 other ports, IPv6, spoofing -->
+      <rect x="520" y="616" width="300" height="84" rx="6" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.30)" stroke-width="1" stroke-dasharray="4,3"/>
+      <rect x="528" y="624" width="32" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+      <text x="544" y="633" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">DENY</text>
+      <text x="670" y="648" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Other ports, IPv6, spoof</text>
+      <text x="670" y="664" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">non-443 ports · IPv6 · ARP/MAC spoof</text>
+      <text x="670" y="678" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">layer: bridge EtherType allowlist + macspoofchk</text>
+      <text x="670" y="692" fill="#7a8399" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">#722 — UNPROVEN</text>
+
+      <!-- Editorial callouts (max 2) -->
+      <text x="200" y="330" fill="#2d3142" font-size="13" font-style="italic" font-family="'Instrument Serif', serif" text-anchor="end">Kata + admission block host devices</text>
+      <text x="200" y="346" fill="#2d3142" font-size="13" font-style="italic" font-family="'Instrument Serif', serif" text-anchor="end">and hostNetwork before any packet leaves.</text>
+      <path d="M 160 350 Q 120 358 100 372" fill="none" stroke="rgba(45,49,66,0.40)" stroke-width="1" stroke-dasharray="4,3"/>
+      <circle cx="100" cy="372" r="2" fill="#2d3142"/>
+
+      <text x="860" y="330" fill="#4f5d75" font-size="13" font-style="italic" font-family="'Instrument Serif', serif" text-anchor="end">NetworkPolicy is the second, weaker layer —</text>
+      <text x="860" y="346" fill="#4f5d75" font-size="13" font-style="italic" font-family="'Instrument Serif', serif" text-anchor="end">it can't see L2, IPv6, or pre-DNAT traffic.</text>
+      <path d="M 800 350 Q 760 360 740 370" fill="none" stroke="rgba(45,49,66,0.30)" stroke-width="1" stroke-dasharray="4,3"/>
+      <circle cx="740" cy="370" r="2" fill="#4f5d75"/>
+
+      <!-- Legend strip -->
+      <line x1="40" y1="736" x2="860" y2="736" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+      <text x="40" y="752" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
+
+      <line x1="40" y1="768" x2="68" y2="768" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <text x="76" y="771" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Allowed path</text>
+
+      <line x1="188" y1="768" x2="216" y2="768" stroke="#eb6c36" stroke-width="1.4" marker-end="url(#arrow-accent)"/>
+      <text x="224" y="771" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Narrow allow (focal)</text>
+
+      <line x1="368" y1="768" x2="388" y2="768" stroke="#4f5d75" stroke-width="1" stroke-dasharray="5,4"/>
+      <line x1="392" y1="762" x2="392" y2="774" stroke="#4f5d75" stroke-width="2"/>
+      <text x="400" y="771" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Denied — stops at the boundary</text>
+
+      <text x="40" y="796" fill="#7a8399" font-size="8.5" font-family="'Geist Mono', monospace">Every control on this page is marked UNPROVEN: homelab#722 is a draft plan and no live run has happened yet.</text>
+    </svg>

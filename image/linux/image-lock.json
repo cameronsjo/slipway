@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "platform": "linux/amd64",
+  "runner_base": "myoung34/github-runner:2.338.2-ubuntu-noble@sha256:23e3a4a1da30de5b462ad0ae13d901288e803a688075c3b9b5bb79b7148c07fa",
+  "runner_root": "/actions-runner",
+  "docker_base": "docker@sha256:7bf70dcb85c822e3fa6f2d332143e474b99147b9d7b39102b0cfe8b04a7dd61b",
+  "worker_binary": "runner-pool-worker-linux-amd64",
+  "worker_sha256": "c983b81a75dc098de77b30b422bbb7a29ef7f255d81433dc6a84494411f72407",
+  "bootstrap_ca": "bootstrap-ca.pem",
+  "bootstrap_ca_sha256": "0bf474c38725dba8615db32a6a21b674c950064d6edaefc56ce340cc6d5f3b47",
+  "job_user": {
+    "uid": 1001,
+    "gid": 121
+  },
+  "paths": {
+    "workspace": "/actions-runner/_work",
+    "support": "/actions-runner/externals",
+    "docker_socket": "/var/run/docker.sock",
+    "docker_root": "/var/lib/docker",
+    "tmp": "/tmp"
+  }
+}

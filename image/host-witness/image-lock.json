@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "platform": "linux/amd64",
+  "binary": "runner-pool-host-witness-linux-amd64",
+  "binary_sha256": "0047a216515b93320efac7e4af802745ac2ea977013cc6c3caad9a65ca60fbf5",
+  "host_tool_binary": "runner-pool-host-tool-linux-amd64",
+  "host_tool_sha256": "7e8ca4ba1ea2ccb09337434c26a4f9b5d0b6774fb23892fdb730cea2b32cf722",
+  "host_root": "/host",
+  "host_tools": {
+    "crictl": "/var/lib/rancher/k3s/data/current/bin/crictl",
+    "ctr": "/var/lib/rancher/k3s/data/current/bin/ctr"
+  }
+}

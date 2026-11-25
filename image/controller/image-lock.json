@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "platform": "linux/amd64",
+  "ca_base": "myoung34/github-runner@sha256:590cdc6864129ed5a7799f86fba536f29690b9f2ae988ef8a6b7d8da7ae4596d",
+  "binary": "runner-pool-linux-amd64",
+  "binary_sha256": "8370132988680a6e96cca58adb2e87d6c203fe1485626228177b888957da8ce1"
+}

@@ -1,0 +1,11 @@
+slipway
+Copyright 2026 Cameron Sjo
+
+This product includes software developed by Cameron Sjo
+(https://github.com/cameronsjo/slipway).
+
+This product includes a vendored, modified copy of GitHub Actions Scale Set
+client (`third_party/actions-scaleset/`), originally from
+https://github.com/actions/scaleset (ref 21ecccd6), licensed under the MIT
+License (Copyright GitHub, Inc.). See `third_party/actions-scaleset/LICENSE`
+and `third_party/actions-scaleset/UPSTREAM.md` for details.

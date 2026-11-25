@@ -1,0 +1,8 @@
+title = "slipway gitleaks config"
+
+[allowlist]
+description = "Vendored upstream actions/scaleset test-only sample RSA keys"
+paths = [
+  '''third_party/actions-scaleset/internal/testserver/server\.go''',
+  '''third_party/actions-scaleset/client_test\.go''',
+]
