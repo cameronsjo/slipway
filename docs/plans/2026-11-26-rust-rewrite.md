@@ -2,43 +2,42 @@
 
 - **Status:** proposed. Nothing in this plan is implemented.
 - **Date:** 2026-11-26
-- **Scope:** every Go binary in `cmd/` and the packages under `internal/` and `third_party/actions-scaleset/`. The OCI build inputs, Python lock checks and docs change only where a phase says so.
-- **Decision needed from Cameron:** the goal (§ Why), the scope option (§ Options), and the four open questions at the end.
+- **Scope:** every Go file in the repository, including `internal/admission` and `third_party/actions-scaleset/`, plus the Python lock tooling. The end state has no Go. Shell glue (`entrypoint.sh`, `build-oci.sh`, `check-lock.sh`) stays shell.
+- **Decision needed from Cameron:** go/no-go after Phase 2, and the open questions at the end.
 
 ## Summary
 
 Rewrite slipway one process at a time, smallest and most isolated first, and the controller last. Every phase ships a Rust binary that replaces exactly one Go binary, behind the same wire contract, the same flags, and the same SQLite journal. Rollback at any point is "deploy the previous image". The Go tree stays in the repository as the reference implementation and the test oracle until the last Go binary is retired.
 
-Two pieces stay in Go on purpose: `internal/admission` (its whole value is matching the API server's `cel-go`), and the Go `actions/scaleset` fork as a reference for pin-update review. § Keep in Go explains both.
+Two pieces need a different Rust path rather than a straight port: `internal/admission` (its value is matching the API server's `cel-go`) and the vendored `actions/scaleset` fork (its value is a hash test proving it equals upstream). § The two hard pieces gives each one a Rust replacement and says what changes.
 
-Rough size: **10 to 14 weeks** of calendar time with Cameron reviewing one PR per phase step. Most of that is the controller core and its 17k lines of tests.
+Rough size: **11 to 15 weeks** of calendar time with Cameron reviewing one PR per phase step. Most of that is the controller core and its 17k lines of tests.
 
 ## Why
 
-This plan does not know Cameron's reason, and the reason changes the plan. The likely ones and what each buys:
+Cameron's stated goals (2026-11-26): **higher safety**, **interoperability**, a **lower runtime profile**, and Rust as **the language of the future**. If the rewrite goes ahead, it goes **all the way to Rust**, with no Go left in the tree. What each goal buys in this codebase:
 
-| Goal | What Rust actually buys here | Cheaper way to get it |
-| --- | --- | --- |
-| Type-checked lifecycle | Phases, lease states and evidence kinds become exhaustive `enum`s; an unhandled phase fails to compile. This is the strongest argument: the controller is mostly a state machine whose bugs are "a phase nobody handled". | Go linters (`exhaustive`) get part of it. |
-| Data-race freedom by construction | `Send`/`Sync` checks replace `-race` as the backstop for 56 goroutine sites and the store/manager mutexes. | `-race` already runs in CI. |
-| Smaller, simpler `scratch` images | Static musl binaries, no Go runtime. The witness and host-tool images shrink. | Already static with `CGO_ENABLED=0`. |
-| One language across Cameron's projects | Some of Cameron's other tooling is already Rust. | None. |
-| Memory safety | Go is already memory-safe. Not a reason. | n/a |
+| Goal | What it means for slipway |
+| --- | --- |
+| Higher safety | Lease phases, lease states and evidence kinds become exhaustive `enum`s, so an unhandled phase fails to compile. The controller is mostly a state machine, and its correctness rests on every phase being handled. `Send`/`Sync` checks replace `-race` as the backstop for 56 goroutine sites and the store and manager mutexes. |
+| Interoperability | One language with Cameron's other Rust tooling, and shared crates (`slipway-wire`) that other tools can use to speak the witness and bootstrap protocols. |
+| Lower profile | Static musl binaries with no garbage collector. The `scratch` witness and host-tool images and the in-VM worker get smaller and use less steady memory. |
+| Language of the future | One toolchain, one lockfile, one CI path, once Go is gone. |
 
 **What it costs, beyond the work:**
 
 - **Kubernetes is a Go ecosystem.** `client-go` is the reference client. `kube-rs` is good and supports websocket exec, but it is a second implementation, and slipway leans on exact semantics (UID-precondition deletes, paginated selectors, websocket exec error shapes).
-- **The scale-set SDK has no Rust port.** `third_party/actions-scaleset` is copied unchanged from upstream so a hash test catches drift. A Rust port loses that property. Pin updates become a behavioral review instead of a file diff.
+- **The scale-set SDK has no Rust port.** `third_party/actions-scaleset` is copied unchanged from upstream so a hash test catches drift. A Rust port can no longer be byte-equal to upstream. § The two hard pieces keeps drift detection a different way.
 - **Reproducible binaries start over.** Every `image-lock.json` pins a binary SHA-256. Rust needs its own reproducible build recipe before the first image can be locked.
 - **38k lines of tests.** They encode hard-won invariants (lost responses, restart fencing, refused envelopes). Porting them is most of the work and the part that cannot be skimped.
 
-## Options
+## Milestones
 
-1. **Full rewrite (this plan).** All five binaries move to Rust; Go remains only for `internal/admission` and the reference SDK fork.
-2. **Leaf binaries only.** Rewrite `runner-pool-host-tool`, `runner-pool-worker`, `runner-pool-guest-launch` and `runner-pool-host-witness` (Phases 0 to 2). The controller stays Go. About 3 weeks. Gets the smaller images and proves the toolchain, without touching the journal or the GitHub queue code.
-3. **No rewrite; harden the Go.** Add `exhaustive` and stricter vet rules. About 2 days.
+1. **Milestone A: leaf binaries (Phases 0 to 2, about 3 weeks).** `runner-pool-host-tool`, `runner-pool-worker`, `runner-pool-guest-launch` and `runner-pool-host-witness` move to Rust. The controller stays Go. This proves the toolchain, the reproducible build and the differential testing without touching the journal or the GitHub queue code.
+2. **Go/no-go.** Cameron decides whether to commit, with real numbers from Milestone A.
+3. **Milestone B: everything else (Phases 3 to 7).** The controller, both backends, the admission check, the scale-set SDK and the Python tooling. Ends with no Go in the repository.
 
-**Recommendation:** start with option 2 as the first milestone of option 1. Phase 2 ends at a natural stop: Cameron can decide to continue into the controller with real numbers on how the port went.
+Stopping after Milestone A is a supported end state: the leaf binaries talk to the Go controller over contracts that do not change.
 
 ## What exists today
 
@@ -80,7 +79,8 @@ Production lines exclude `_test.go`. Counts are from `8c6b4bf`.
 | `google/uuid` | `uuid` | |
 | `go-logr`, `klog` | `tracing` | The cycle line is formatted by hand (below), not by a `tracing` formatter. |
 | `flag` | `clap` (derive) | Flag names and defaults stay byte-identical, including single-dash long flags (`-state-dir`). `clap` needs `long` aliases or a small custom parser for that; decide in Phase 0. |
-| `cel-go` | stays Go | See § Keep in Go. |
+| `cel-go` (offline policy check) | `kube` dry-run against `kind` | Not a CEL port. See § The two hard pieces. |
+| Python lock tooling | `cargo xtask` | Same lock-file formats. Phase 7. |
 
 ## Rules that hold for every phase
 
@@ -107,6 +107,8 @@ crates/
   slipway-backend-tart/
   slipway-discovery/
   slipway-probe/
+  slipway-admission/          # kind + dryRun policy check (test-only)
+xtask/                        # upstream-verify, upstream-diff, lock tooling
 bins/
   runner-pool/
   runner-pool-worker/
@@ -145,14 +147,14 @@ Order: `runner-pool-host-tool`, `runner-pool-worker`, `runner-pool-guest-launch`
 - **Differential test:** the Go controller's witness client talks to the Rust witness over a real Unix socket with real peer credentials, for every fixture the Go tests use.
 - **Exit test:** the Rust witness image runs beside the Go controller on the MS-A2 for 48 hours with no admission change.
 
-**Option 2 stops here.** Re-estimate Phases 3 to 7 from how long Phases 1 and 2 actually took.
+**Milestone A ends here.** Re-estimate Phases 3 to 7 from how long Phases 0 to 2 actually took, then go/no-go.
 
 ### Phase 3: GitHub layer (1.5 to 2 weeks)
 
 - `slipway-scaleset`: port the pinned SDK files the controller uses (client, session client, JWT provider, types, errors) plus `resume.go`. Keep the no-retry, no-redirect client and the response hook that captures the wire body before decoding.
 - `slipway-githubapp`: installation-token scoping (one repository, `administration: write`), the private-and-active choke point, queued-jobs REST read, queue janitor.
 - **Differential test:** a recorded-exchange harness. Every HTTP exchange the Go SDK tests make against their local TLS server is captured as a fixture, and the Rust client must send byte-equivalent requests (method, path, headers that matter, JSON body) and reach the same decision on each response. The `testdata/live-*.json` captures join the set.
-- The Go fork stays in the tree. A pin update now means: update the Go fork as today, re-record the fixtures, and port whatever the diff shows.
+- Replace the fork's hash test with `UPSTREAM.lock` and `cargo xtask upstream-diff` (see § The two hard pieces). The Go fork stays in the tree only until Phase 7, as the source of the recorded fixtures.
 
 ### Phase 4: journal and controller core (3 to 4 weeks)
 
@@ -169,11 +171,11 @@ Lease phases, evidence sources and statistics verdicts become `enum`s with no wi
 
 **Exit test:** every scenario produces identical tables, and a journal written by Rust opens cleanly in the Go controller and the reverse.
 
-### Phase 5: backends (2 to 3 weeks)
+### Phase 5: backends and admission check (2.5 to 3.5 weeks)
 
 - `slipway-backend-kubernetes`: Pod spec builder, paginated owner/platform inventory, create-once, foreground delete with UID precondition, websocket exec for bootstrap delivery, capacity sources.
 - `slipway-backend-tart`: the 11-step `Create`, the pf gate's five read-backs with `gate_read_timeout`, the ledger, the never-waited delivery child, `max_owned_vms`.
-- The Pod spec is the security boundary the admission policy checks. The Rust builder's output for every case runs through the Go `internal/admission` evaluator in CI, so the two languages cannot disagree about what the policy accepts.
+- The Pod spec is the security boundary the admission policy checks. Port `internal/admission` here, as described in § The two hard pieces, and run the Rust Pod builder's output for every lease fixture through it, so the builder and the policy cannot disagree.
 - **Differential test:** the Rust and Go Pod builders produce identical YAML for every lease fixture.
 
 ### Phase 6: controller binary and cutover (1 week of work, 2 weeks wall clock)
@@ -183,16 +185,39 @@ Lease phases, evidence sources and statistics verdicts become `enum`s with no wi
 - **Cutover, macOS first:** the M1 Max pool is two slots and has the simpler deploy (launchd plist). Stop Go, start Rust on the same state directory, watch the cycle line for 72 hours, then repeat on the MS-A2 through a Flux PR.
 - **Rollback:** redeploy the Go image or plist. Rule 2 makes the journal readable by both.
 
-### Phase 7: retire Go (2 days)
+### Phase 7: retire Go (3 to 4 days)
 
-- Delete `cmd/` and `internal/` except `internal/admission`. Move the Go fork of `actions-scaleset` under `reference/` with its hash test still running, as the oracle for future pin updates.
-- Update `README.md`, `Makefile`, CI, `docs/images-and-reproducibility.md`, and the `Code:` `path:line` pointers in the field guide.
+- Delete `cmd/`, `internal/`, `go.mod`, `go.sum` and `third_party/actions-scaleset/`. The recorded HTTP fixtures and `UPSTREAM.lock` are what remain of the fork.
+- Port the Python lock tooling (`scripts/relock-*.py`, `image/check-control-plane.py`, `image/verify-review-images.py`, `image/linux/test_bundle.py` and their tests, about 620 lines) to `cargo xtask` subcommands. Keep the same lock-file formats, so existing locks verify unchanged.
+- Update `README.md`, `Makefile`, CI, `NOTICE`, `docs/images-and-reproducibility.md`, and the `Code:` `path:line` pointers in the field guide.
 - Journal schema changes are allowed again.
 
-## Keep in Go
+## The two hard pieces
 
-- **`internal/admission`.** It exists to evaluate the admission policy the same way the Kubernetes API server does, and the API server runs `cel-go`. A Rust CEL interpreter is a third evaluator that would have to match the second. It is test-only code and never ships in an image. It stays as a small Go module run in CI.
-- **The `actions-scaleset` fork, as reference only.** Its value is that a hash test proves it equals upstream. It moves under `reference/` in Phase 7 and runs no production code.
+Both can move to Rust. Neither is a straight port, because each one's value comes from matching something outside the repository.
+
+### `internal/admission`: use the real API server instead of a second evaluator
+
+Today `internal/admission` evaluates the committed `ValidatingAdmissionPolicy` offline with `cel-go`, at the version the API server pins. Its own doc comment says it is "a second evaluator, not the API server's evaluator". Porting it to a Rust CEL crate (`cel-interpreter`) would make a third evaluator that has to match the second. That is worse, not just different.
+
+**The Rust path:** a Rust test crate, `slipway-admission`, that creates a `kind` cluster pinned to the production Kubernetes minor and installs the committed `admission.yaml` (policy plus binding) unchanged. It then sends every fixture Pod with `dryRun=All` through `kube`. The API server runs the policy for real and answers accept or deny, so the evaluator is the one production uses.
+
+- **Safer than today.** It removes every gap the Go doc comment lists: lazy versus eager variables, OpenAPI typing, `int64` versus `float64`, and unbound names.
+- **Slower.** Each run needs a cluster, about 2 to 3 minutes in CI. Locally it needs Docker or OrbStack.
+- **Optional fast check.** A `cel-interpreter` pre-check can run in the edit loop. It never gates a merge, because it is a second evaluator again.
+
+The Phase 5 Pod-builder check and this check share the same `kind` cluster.
+
+### `actions-scaleset`: port it, and keep drift detection without the Go copy
+
+The fork's value is a hash test proving the copied files equal upstream at a pinned commit. A Rust port cannot keep that property. Drift detection can stay:
+
+- **`UPSTREAM.lock`** records the upstream repository, the pinned commit, and the SHA-256 of every upstream file the port mirrors, each mapped to the Rust module that ports it. `resume.go` is marked as slipway's own extension.
+- **`cargo xtask upstream-verify`** fetches upstream at the pinned commit and checks the hashes. That proves the lock describes real upstream source. It runs in CI.
+- **`cargo xtask upstream-diff <commit>`** lists the files that changed between the pin and a newer commit, with the Rust modules each change touches. A pin update ports exactly that list.
+- **Recorded HTTP fixtures** captured from the Go SDK tests in Phase 3 stay as the Rust crate's behavioral tests. A pin update re-records the ones whose upstream tests changed.
+
+What is lost: before, the code that ran was upstream's own code. After, it is slipway's port of it, kept honest by fixtures and a reviewed diff list. This is the one real step down in assurance, and the price of having no Go.
 
 ## Risks
 
@@ -200,7 +225,8 @@ Lease phases, evidence sources and statistics verdicts become `enum`s with no wi
 | --- | --- | --- |
 | A Rust port silently changes an invariant the Go tests encode | Lost lease, double POST, or a leaked slot in production | Journal differential harness; test-by-test porting ledger in each PR |
 | `kube-rs` differs from `client-go` on exec or delete-precondition errors | Uncertain create/delete classified wrong | Phase 5 differential tests against a `kind` cluster, not only mocks |
-| Scale-set SDK drift is no longer caught by a file hash | Upstream fixes missed | Go reference fork keeps its hash test; recorded-exchange fixtures re-run on pin updates |
+| Scale-set SDK drift is no longer caught by a file hash | Upstream fixes missed | `UPSTREAM.lock` with `upstream-verify` in CI and `upstream-diff` on pin updates; recorded-exchange fixtures |
+| `kind` in CI is slow or flaky | Admission check skipped under pressure | Admission check is a required job; one cluster shared with the Pod-builder check |
 | Reproducible build drifts (C compiler for bundled SQLite) | Image locks cannot be reproduced | Phase 0 two-machine hash test; build container pinned by digest |
 | Cycle-line text drifts | Log queries and the outage signature (`polled=0 advertised=none`) go blind | Golden tests on every operator-visible line, including Go duration format |
 | Go and Rust controller open one journal at once | Two writers | Same `flock` on `pool.lock`; a cross-language test proves the second one refuses |
@@ -208,7 +234,6 @@ Lease phases, evidence sources and statistics verdicts become `enum`s with no wi
 
 ## Open questions for Cameron
 
-1. **Which goal from § Why matters most?** If it is only image size or one-language consistency, option 2 is enough.
-2. **Full rewrite or leaf binaries first?** This plan recommends leaf binaries first, with a go/no-go after Phase 2.
-3. **Should the controller stay single-binary-per-platform,** or is a Rust rewrite the moment to split Linux and macOS builds into separate binaries? This plan keeps one binary to keep rollback simple.
-4. **Is a `kind` cluster in this repo's CI acceptable** for Phase 5? It adds a few minutes to each `ubuntu-latest` run.
+1. **Should the controller stay one binary for both platforms,** or should the rewrite split the Linux and macOS builds into separate binaries? This plan keeps one binary to keep rollback simple.
+2. **Is a required `kind` job in this repo's CI acceptable?** It replaces the offline admission check and adds 2 to 3 minutes to each `ubuntu-latest` run.
+3. **Should the shell glue move too?** `entrypoint.sh`, `build-oci.sh` and `check-lock.sh` (about 220 lines) stay shell in this plan, because they only call `docker` and the runner. Moving them to `xtask` is about a day.
